@@ -86,6 +86,9 @@ class VolumeBase {
     int getMountFlags() const { return mMountFlags; }
     userid_t getMountUserId() const { return mMountUserId; }
     State getState() const { return mState; }
+    bool isMounted() const {
+        return mState == State::kMounted || mState == State::kMountedReadOnly;
+    }
     const std::string& getPath() const { return mPath; }
     const std::string& getInternalPath() const { return mInternalPath; }
     const std::list<std::shared_ptr<VolumeBase>>& getVolumes() const { return mVolumes; }
@@ -126,6 +129,8 @@ class VolumeBase {
 
     status_t setId(const std::string& id);
     status_t setPath(const std::string& path);
+    /* Report the next mount as kMountedReadOnly (call from doMount) */
+    void setMountedReadOnly(bool readOnly) { mMountedReadOnly = readOnly; }
     status_t setInternalPath(const std::string& internalPath);
 
     android::sp<android::os::IVoldListener> getListener() const;
@@ -160,6 +165,8 @@ class VolumeBase {
     std::list<std::shared_ptr<VolumeBase>> mVolumes;
 
     void setState(State state);
+    /* Set by doMount() when the file system ended up read-only */
+    bool mMountedReadOnly;
 
     DISALLOW_COPY_AND_ASSIGN(VolumeBase);
 };
