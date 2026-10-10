@@ -34,6 +34,11 @@ static const char* kMkfsPath = "/system/bin/mkfs.ntfs";
 static const char* kFsckPath = "/system/bin/fsck.ntfs";
 static const char* kMountPath = "/system/bin/mount.ntfs";
 
+// ntfs-3g exit codes (NTFS_VOLUME_HIBERNATED, NTFS_VOLUME_UNCLEAN_UNMOUNT): Windows was
+// hibernated, used Fast Startup, or the drive was pulled without "Safely Remove".
+static const int kExitHibernated = 14;
+static const int kExitUncleanUnmount = 15;
+
 bool IsSupported() {
     return access(kMkfsPath, X_OK) == 0
             && access(kFsckPath, X_OK) == 0
@@ -59,10 +64,11 @@ status_t Check(const std::string& source) {
 }
 
 status_t Mount(const std::string& source, const std::string& target, int ownerUid, int ownerGid,
-               int permMask) {
-    auto mountData = android::base::StringPrintf("utf8,uid=%d,gid=%d,fmask=%o,dmask=%o,"
+               int permMask, bool readOnly) {
+    auto mountData = android::base::StringPrintf("%sutf8,uid=%d,gid=%d,fmask=%o,dmask=%o,"
                                                  "shortname=mixed,nodev,nosuid,dirsync,noatime,"
-                                                 "noexec", ownerUid, ownerGid, permMask, permMask);
+                                                 "noexec", readOnly ? "ro," : "", ownerUid,
+                                                 ownerGid, permMask, permMask);
 
     std::vector<std::string> cmd;
     cmd.push_back(kMountPath);
@@ -75,6 +81,10 @@ status_t Mount(const std::string& source, const std::string& target, int ownerUi
     if (rc == 0) {
         LOG(INFO) << "Mount OK";
         return 0;
+    } else if (!readOnly && (rc == kExitHibernated || rc == kExitUncleanUnmount)) {
+        LOG(WARNING) << "Mount failed (code " << rc << "), not shut down safely by Windows";
+        errno = EROFS;
+        return -1;
     } else {
         LOG(ERROR) << "Mount failed (code " << rc << ")";
         errno = EIO;

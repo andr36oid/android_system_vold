@@ -38,7 +38,8 @@ VolumeBase::VolumeBase(Type type)
       mMountUserId(USER_UNKNOWN),
       mCreated(false),
       mState(State::kUnmounted),
-      mSilent(false) {}
+      mSilent(false),
+      mMountedReadOnly(false) {}
 
 VolumeBase::~VolumeBase() {
     CHECK(!mCreated);
@@ -201,7 +202,7 @@ status_t VolumeBase::doCreate() {
 status_t VolumeBase::destroy() {
     CHECK(mCreated);
 
-    if (mState == State::kMounted) {
+    if (isMounted()) {
         unmount();
         setState(State::kBadRemoval);
     } else {
@@ -229,8 +230,13 @@ status_t VolumeBase::mount() {
     }
 
     setState(State::kChecking);
+    mMountedReadOnly = false;
     status_t res = doMount();
-    setState(res == OK ? State::kMounted : State::kUnmountable);
+    if (res != OK) {
+        setState(State::kUnmountable);
+    } else {
+        setState(mMountedReadOnly ? State::kMountedReadOnly : State::kMounted);
+    }
 
     if (res == OK) {
         doPostMount();
@@ -241,7 +247,7 @@ status_t VolumeBase::mount() {
 void VolumeBase::doPostMount() {}
 
 status_t VolumeBase::unmount() {
-    if (mState != State::kMounted) {
+    if (!isMounted()) {
         LOG(WARNING) << getId() << " unmount requires state mounted";
         return -EBUSY;
     }
@@ -260,7 +266,7 @@ status_t VolumeBase::unmount() {
 }
 
 status_t VolumeBase::format(const std::string& fsType) {
-    if (mState == State::kMounted) {
+    if (isMounted()) {
         unmount();
     }
 

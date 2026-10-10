@@ -28,8 +28,10 @@ namespace ntfs {
 bool IsSupported();
 
 status_t Check(const std::string& source);
+// Fails with errno EROFS when ntfs-3g refuses to write because Windows left the drive
+// hibernated (Fast Startup) or not safely removed: mount again with readOnly then.
 status_t Mount(const std::string& source, const std::string& target, int ownerUid, int ownerGid,
-               int permMask);
+               int permMask, bool readOnly = false);
 status_t Format(const std::string& source);
 
 }  // namespace ntfs

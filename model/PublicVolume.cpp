@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -174,6 +175,12 @@ status_t PublicVolume::doMount() {
     } else if (mFsType == "ntfs") {
         ret = ntfs::Mount(mDevPath, mRawPath, AID_ROOT,
                  (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007);
+        // Windows left it hibernated or not safely removed: open it read-only rather than
+        // not at all. Never remove_hiberfile: that throws away the Windows session.
+        if (ret && errno == EROFS) {
+            ret = ntfs::Mount(mDevPath, mRawPath, AID_ROOT,
+                     (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007, true);
+        }
     } else if (mFsType == "vfat") {
         ret = vfat::Mount(mDevPath, mRawPath, false, false, false, AID_ROOT,
                 (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007, true);
@@ -183,6 +190,14 @@ status_t PublicVolume::doMount() {
     if (ret) {
         PLOG(ERROR) << getId() << " failed to mount " << mDevPath;
         return -EIO;
+    }
+
+    // Report a read-only mount as such (ntfs-3g falls back to read-only by itself when
+    // Windows left the drive unsafe), so apps and the notification can tell the user.
+    struct statvfs sv;
+    if (statvfs(mRawPath.c_str(), &sv) == 0 && (sv.f_flag & ST_RDONLY)) {
+        LOG(WARNING) << getId() << " mounted read-only (" << mFsType << ")";
+        setMountedReadOnly(true);
     }
 
     if (getMountFlags() & MountFlags::kPrimary) {
