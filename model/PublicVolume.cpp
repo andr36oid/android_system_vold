@@ -137,8 +137,16 @@ status_t PublicVolume::doMount() {
     }
 
     int ret = 0;
+    bool readOnly = false;
     if (mFsType == "exfat") {
         ret = exfat::Check(mDevPath);
+        // Errors the check won't fix on its own: open the card read-only rather than not at
+        // all, which would leave the user one tap away from formatting it.
+        if (ret && errno == EUCLEAN) {
+            LOG(WARNING) << getId() << " has file system errors, mounting read-only";
+            readOnly = true;
+            ret = 0;
+        }
     } else if (mFsType == "ext4") {
         ret = ext4::Check(mDevPath, mRawPath, false);
     } else if (mFsType == "f2fs") {
@@ -157,7 +165,7 @@ status_t PublicVolume::doMount() {
 
     if (mFsType == "exfat") {
         ret = exfat::Mount(mDevPath, mRawPath, AID_ROOT,
-                 (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007);
+                 (isVisible ? AID_MEDIA_RW : AID_EXTERNAL_STORAGE), 0007, readOnly);
     } else if (mFsType == "ext4") {
         ret = ext4::Mount(mDevPath, mRawPath, false, false, true, mMntOpts,
                 false, true);

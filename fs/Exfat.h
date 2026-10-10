@@ -27,9 +27,10 @@ namespace exfat {
 
 bool IsSupported();
 
+// Fails with errno EUCLEAN when errors are left that fsck -a won't fix (mount read-only then)
 status_t Check(const std::string& source);
 status_t Mount(const std::string& source, const std::string& target, int ownerUid, int ownerGid,
-               int permMask);
+               int permMask, bool readOnly = false);
 status_t Format(const std::string& source);
 
 }  // namespace exfat

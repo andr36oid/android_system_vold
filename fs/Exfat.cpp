@@ -44,10 +44,22 @@ status_t Check(const std::string& source) {
     cmd.push_back("-a");
     cmd.push_back(source);
 
+    // fsck.exfat (exfatprogs) exit codes: 0 no errors, 1 errors corrected, 4 errors left.
+    // After a power loss "-a" often fixes something and exits 1; that is a good check, not a
+    // failed one (the volume used to stay unmounted until the next boot).
     int rc = ForkExecvp(cmd, nullptr, sFsckUntrustedContext);
     if (rc == 0) {
         LOG(INFO) << "Check OK";
         return 0;
+    } else if (rc == 1) {
+        LOG(WARNING) << "Check OK, errors fixed";
+        return 0;
+    } else if (rc == 4) {
+        // Left alone by "-a": problems only fixable by cutting files short. The caller
+        // mounts read-only so the files can still be read and copied off.
+        LOG(ERROR) << "Check failed (code 4), errors left";
+        errno = EUCLEAN;
+        return -1;
     } else {
         LOG(ERROR) << "Check failed (code " << rc << ")";
         errno = EIO;
@@ -56,8 +68,9 @@ status_t Check(const std::string& source) {
 }
 
 status_t Mount(const std::string& source, const std::string& target, int ownerUid, int ownerGid,
-               int permMask) {
+               int permMask, bool readOnly) {
     int mountFlags = MS_NODEV | MS_NOSUID | MS_DIRSYNC | MS_NOATIME | MS_NOEXEC;
+    if (readOnly) mountFlags |= MS_RDONLY;
     auto mountData = android::base::StringPrintf("uid=%d,gid=%d,fmask=%o,dmask=%o", ownerUid,
                                                  ownerGid, permMask, permMask);
 
