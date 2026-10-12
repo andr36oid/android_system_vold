@@ -43,6 +43,10 @@ class PublicVolume : public VolumeBase {
             const std::string& fstype = "");
     virtual ~PublicVolume();
 
+    // andr36oid: also called right after creation, so system_server knows the label
+    // of a card it doesn't mount yet (Disk::createPublicVolume)
+    status_t readMetadata();
+
   protected:
     status_t doCreate() override;
     status_t doDestroy() override;
@@ -50,7 +54,6 @@ class PublicVolume : public VolumeBase {
     status_t doUnmount() override;
     status_t doFormat(const std::string& fsType) override;
 
-    status_t readMetadata();
     status_t initAsecStage();
 
   private:

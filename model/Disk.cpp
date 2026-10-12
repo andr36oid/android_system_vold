@@ -188,6 +188,9 @@ void Disk::createPublicVolume(dev_t device,
     mVolumes.push_back(vol);
     vol->setDiskId(getId());
     vol->create();
+    // andr36oid: the label before any mount: system_server holds a second card back
+    // during the first start and names it ("EASYROMS seen, ...")
+    static_cast<PublicVolume*>(vol.get())->readMetadata();
 }
 
 void Disk::createPrivateVolume(dev_t device, const std::string& partGuid) {
