@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+#include <fcntl.h>
+#include <string.h>
 #include <sys/mount.h>
+#include <unistd.h>
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 
 #include <logwrap/logwrap.h>
 
@@ -38,7 +42,26 @@ bool IsSupported() {
            IsFilesystemSupported("exfat");
 }
 
+// True when the boot sector says the volume was unmounted cleanly: VolumeDirty and
+// MediaFailure (VolumeFlags bits 1 and 2) are clear. False when it can't be read.
+static bool IsClean(const std::string& source) {
+    android::base::unique_fd fd(open(source.c_str(), O_RDONLY | O_CLOEXEC));
+    unsigned char boot[512];
+    if (fd == -1 || pread(fd, boot, sizeof(boot), 0) != sizeof(boot)) return false;
+    if (memcmp(boot + 3, "EXFAT   ", 8) != 0) return false;
+    unsigned int flags = boot[106] | (boot[107] << 8);
+    return (flags & 0x6) == 0;
+}
+
 status_t Check(const std::string& source) {
+    // A clean volume needs no check: the full check reads every folder and can take
+    // minutes on a big card full of ROMs. A dirty one gets the full check, however long
+    // it takes (system_server shows a notification meanwhile).
+    if (IsClean(source)) {
+        LOG(INFO) << "Check skipped, the volume was unmounted cleanly";
+        return 0;
+    }
+
     std::vector<std::string> cmd;
     cmd.push_back(kFsckPath);
     cmd.push_back("-a");
